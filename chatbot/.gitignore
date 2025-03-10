@@ -19,10 +19,16 @@
 
 # production
 /build
+/dist
 
 # misc
 .DS_Store
 *.pem
+Thumbs.db
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
 
 # debug
 npm-debug.log*
@@ -30,8 +36,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -42,3 +49,17 @@ next-env.d.ts
 
 # local env files
 .env*.local
+
+# logs
+logs
+*.log
+
+# editor directories and files
+.DS_Store
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
