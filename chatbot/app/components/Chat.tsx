@@ -10,7 +10,7 @@ export default function Chat() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Use the Vercel AI SDK's useChat hook
+    // Use the Vercel AI SDK's useChat hook with explicitly set stream protocol
     const {
         messages,
         input,
@@ -29,7 +29,7 @@ export default function Chat() {
                 id: '1'
             }
         ],
-        // Don't specify streamMode and let it use the default
+        streamProtocol: 'data', // Explicitly set to 'data' to match server-side
     });
 
     // Auto-scroll to bottom when messages change

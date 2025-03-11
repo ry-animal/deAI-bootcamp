@@ -47,15 +47,7 @@ export async function POST(req: Request) {
 
     // Return a streaming response with explicit headers for text/event-stream
     console.log('Returning streaming response');
-    const response = result.toTextStreamResponse({
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      }
-    });
-    
-    return response;
+    return result.toDataStreamResponse();
   } catch (error: unknown) {
     console.error('Error in chat API:', error);
     const errorMessage = error instanceof Error ? error.message : 'An error occurred during the request';
