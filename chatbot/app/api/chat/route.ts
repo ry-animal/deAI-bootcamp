@@ -1,42 +1,48 @@
-import { OpenAI } from 'openai';
-import { NextRequest, NextResponse } from 'next/server';
+import { OpenAIStream, StreamingTextResponse } from 'ai';
+import OpenAI from 'openai';
 
-const ALLOWED_MODELS = ['gpt-3.5-turbo', 'gpt-4'];
-
-// Initialize the OpenAI client
+// Create an OpenAI API client
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY || '',
 });
 
-export async function POST(req: NextRequest) {
-  try {
-    const { messages, stream = false, model = 'gpt-3.5-turbo' } = await req.json();
+// IMPORTANT! Set the runtime to edge
+export const runtime = 'edge';
 
+interface Message {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+export async function POST(req: Request) {
+  try {
+    const { messages, model = 'gpt-3.5-turbo' } = await req.json();
+
+    // Validate messages and model
     if (!messages || !Array.isArray(messages)) {
-      return NextResponse.json(
-        { error: 'Messages are required and must be an array' },
-        { status: 400 }
+      return new Response(
+        JSON.stringify({ error: 'Messages are required and must be an array' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // Validate model
-    if (!ALLOWED_MODELS.includes(model)) {
-      return NextResponse.json(
-        { error: 'Invalid model specified' },
-        { status: 400 }
+    if (!['gpt-3.5-turbo', 'gpt-4'].includes(model)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid model specified' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
     // Validate OpenAI API key
     if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        { error: 'OpenAI API key is missing' },
-        { status: 500 }
+      return new Response(
+        JSON.stringify({ error: 'OpenAI API key is missing' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
     // Add system message if not present
-    const messagesWithSystem = messages.some(msg => msg.role === 'system')
+    const messagesWithSystem = messages.some((msg: Message) => msg.role === 'system')
       ? messages
       : [
           {
@@ -46,67 +52,25 @@ export async function POST(req: NextRequest) {
           ...messages,
         ];
 
-    // If stream is requested, handle streaming response
-    if (stream) {
-      const encoder = new TextEncoder();
-      
-      const stream = await openai.chat.completions.create({
-        model,
-        messages: messagesWithSystem,
-        temperature: 0.7,
-        stream: true,
-      });
-      
-      const readableStream = new ReadableStream({
-        async start(controller) {
-          const streamAssistantMessage = { role: 'assistant', content: '' };
-          
-          for await (const chunk of stream) {
-            const content = chunk.choices[0]?.delta?.content || '';
-            streamAssistantMessage.content += content;
-            
-            // Send the updated message
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ message: streamAssistantMessage })}\n\n`));
-          }
-          
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-          controller.close();
-        },
-      });
-      
-      return new Response(readableStream, {
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
-        },
-      });
-    }
-    
-    // Handle non-streaming response
+    // Request the OpenAI API for the response
     const response = await openai.chat.completions.create({
-      model,
+      model: model,
       messages: messagesWithSystem,
       temperature: 0.7,
+      stream: true,
     });
 
-    // Extract just the assistant's message
-    if (response.choices && response.choices.length > 0) {
-      return NextResponse.json({
-        message: response.choices[0].message
-      });
-    } else {
-      return NextResponse.json(
-        { error: 'No response generated' },
-        { status: 500 }
-      );
-    }
+    // Convert the response into a friendly text-stream
+    const stream = OpenAIStream(response);
+
+    // Respond with the stream
+    return new StreamingTextResponse(stream);
   } catch (error: unknown) {
     console.error('Error in chat API:', error);
     const errorMessage = error instanceof Error ? error.message : 'An error occurred during the request';
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
+    return new Response(
+      JSON.stringify({ error: errorMessage }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 } 

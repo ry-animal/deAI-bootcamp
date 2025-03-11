@@ -1,167 +1,67 @@
 'use client';
 
+import { useChat } from 'ai/react';
 import { useState, useRef, useEffect } from 'react';
-
-type Message = {
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-};
 
 type Model = 'gpt-3.5-turbo' | 'gpt-4';
 
 export default function Chat() {
-    const [input, setInput] = useState('');
-    const [messages, setMessages] = useState<Message[]>([
-        {
-            role: 'assistant',
-            content: 'Hello! I\'m your AI assistant. How can I help you today?'
-        }
-    ]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [streamingMessage, setStreamingMessage] = useState<Message | null>(null);
     const [model, setModel] = useState<Model>('gpt-3.5-turbo');
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
+    // Use the Vercel AI SDK's useChat hook
+    const {
+        messages,
+        input,
+        handleInputChange,
+        handleSubmit,
+        isLoading,
+        error,
+        setMessages
+    } = useChat({
+        api: '/api/chat',
+        body: { model },
+        initialMessages: [
+            {
+                role: 'assistant',
+                content: 'Hello! I\'m your AI assistant. How can I help you today?',
+                id: '1'
+            }
+        ],
+    });
+
     // Auto-scroll to bottom when messages change
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages, streamingMessage?.content]);
+    }, [messages]);
 
     // Focus input on load
     useEffect(() => {
         inputRef.current?.focus();
     }, []);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!input.trim() || isLoading) return;
-
-        const userMessage: Message = { role: 'user', content: input };
-
-        // Clear any previous errors and streaming message
-        setError(null);
-        setStreamingMessage(null);
-
-        // Update UI immediately with user message
-        setMessages(prev => [...prev, userMessage]);
-        setInput('');
-        setIsLoading(true);
-
-        try {
-            // Use streaming API for better UX
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    messages: [...messages, userMessage],
-                    stream: true,
-                    model,
-                }),
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `Error ${response.status}: ${response.statusText}`);
-            }
-
-            if (!response.body) {
-                throw new Error('Response body is null');
-            }
-
-            // Process the streaming response
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let done = false;
-
-            setStreamingMessage({ role: 'assistant', content: '' });
-
-            while (!done) {
-                const { value, done: doneReading } = await reader.read();
-                done = doneReading;
-
-                if (done) break;
-
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n\n');
-
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        const data = line.replace('data: ', '');
-
-                        if (data === '[DONE]') {
-                            // Streaming is complete, add the complete message to the messages array
-                            if (streamingMessage) {
-                                setMessages(prev => [...prev, streamingMessage]);
-                                setStreamingMessage(null);
-                            }
-                            break;
-                        }
-
-                        try {
-                            const parsed = JSON.parse(data);
-                            if (parsed.message) {
-                                setStreamingMessage(parsed.message);
-                            }
-                        } catch (error) {
-                            console.error('Error parsing streaming data:', error);
-                        }
-                    }
-                }
-            }
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            console.error('Error:', errorMessage);
-
-            // Set error state
-            setError(errorMessage);
-
-            // Add a friendly error message to the chat
-            setMessages(prev => [
-                ...prev,
-                { role: 'assistant', content: 'Sorry, there was an error processing your request. Please try again later.' },
-            ]);
-
-            // Clear any partial streaming message
-            setStreamingMessage(null);
-        } finally {
-            setIsLoading(false);
-            // Focus the input field after sending
-            setTimeout(() => inputRef.current?.focus(), 100);
-        }
-    };
-
+    // Clear chat messages
     const clearChat = () => {
-        setMessages([
-            {
-                role: 'assistant',
-                content: 'Chat cleared. How can I help you today?'
-            }
-        ]);
-        setError(null);
-        setStreamingMessage(null);
+        setMessages([]);
     };
 
+    // Export chat history
     const exportChat = () => {
-        // Create a formatted conversation log
-        const conversationText = messages
-            .map(msg => `${msg.role === 'user' ? 'You' : 'AI'}: ${msg.content}`)
-            .join('\n\n');
+        if (messages.length <= 1) return;
 
-        const fileName = `chat-export-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`;
+        const chatHistory = messages.map(message =>
+            `${message.role === 'user' ? 'You' : 'AI'}: ${message.content}`
+        ).join('\n\n');
 
-        // Create a blob and download it
-        const blob = new Blob([conversationText], { type: 'text/plain' });
+        const blob = new Blob([chatHistory], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `chat-history-${new Date().toISOString().split('T')[0]}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(url);
     };
 
@@ -206,12 +106,12 @@ export default function Chat() {
             {error && (
                 <div className="p-3 mx-4 mt-4 rounded-lg bg-red-100/80 border-l-4 border-red-500 text-red-700 text-sm">
                     <p className="font-bold">Error</p>
-                    <p>{error}</p>
+                    <p>{error.message || String(error)}</p>
                 </div>
             )}
 
             <div className="flex-1 p-4 overflow-y-auto bg-secondary/10">
-                {messages.length === 0 && !streamingMessage ? (
+                {messages.length === 0 ? (
                     <div className="h-full flex items-center justify-center">
                         <div className="bg-primary/5 p-5 rounded-xl border border-primary/20 text-center max-w-md">
                             <svg className="w-12 h-12 mx-auto mb-3 text-primary/60" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -223,9 +123,9 @@ export default function Chat() {
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {messages.map((message, index) => (
+                        {messages.map((message) => (
                             <div
-                                key={index}
+                                key={message.id}
                                 className={`p-4 rounded-xl max-w-[85%] ${message.role === 'user'
                                     ? 'bg-primary/10 ml-auto text-right text-foreground shadow-sm'
                                     : 'bg-card-bg mr-auto border border-border shadow-sm text-foreground'
@@ -238,14 +138,7 @@ export default function Chat() {
                             </div>
                         ))}
 
-                        {streamingMessage && (
-                            <div className="bg-card-bg p-4 rounded-xl mr-auto max-w-[85%] border border-border shadow-sm">
-                                <p className="text-sm font-semibold mb-1 text-foreground/80">AI Assistant</p>
-                                <p className="whitespace-pre-wrap text-foreground">{streamingMessage.content}</p>
-                            </div>
-                        )}
-
-                        {isLoading && !streamingMessage && (
+                        {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
                             <div className="bg-card-bg p-4 rounded-xl mr-auto max-w-[85%] border border-border shadow-sm">
                                 <p className="text-sm font-semibold mb-1 text-foreground/80">AI Assistant</p>
                                 <div className="flex space-x-2">
@@ -265,7 +158,7 @@ export default function Chat() {
                         ref={inputRef}
                         type="text"
                         value={input}
-                        onChange={e => setInput(e.target.value)}
+                        onChange={handleInputChange}
                         placeholder="Type your message..."
                         className="flex-1 px-4 py-2.5 border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-foreground/50"
                         disabled={isLoading}
