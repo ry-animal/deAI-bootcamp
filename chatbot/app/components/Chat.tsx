@@ -1,6 +1,6 @@
 'use client';
 
-import { useChat } from 'ai/react';
+import { useChat } from '@ai-sdk/react';
 import { useState, useRef, useEffect } from 'react';
 
 type Model = 'gpt-3.5-turbo' | 'gpt-4';
@@ -10,7 +10,7 @@ export default function Chat() {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Use the Vercel AI SDK's useChat hook with streamMode: "text"
+    // Use the Vercel AI SDK's useChat hook
     const {
         messages,
         input,
@@ -29,7 +29,7 @@ export default function Chat() {
                 id: '1'
             }
         ],
-        streamMode: 'text',  // Use text streaming mode for compatibility
+        // Don't specify streamMode and let it use the default
     });
 
     // Auto-scroll to bottom when messages change
