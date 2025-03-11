@@ -1,18 +1,8 @@
-import { OpenAIStream, StreamingTextResponse } from 'ai';
-import OpenAI from 'openai';
-
-// Create an OpenAI API client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
-});
+import { streamText } from 'ai';
+import { openai } from '@ai-sdk/openai';
 
 // IMPORTANT! Set the runtime to edge
 export const runtime = 'edge';
-
-interface Message {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
 
 export async function POST(req: Request) {
   try {
@@ -41,30 +31,15 @@ export async function POST(req: Request) {
       );
     }
 
-    // Add system message if not present
-    const messagesWithSystem = messages.some((msg: Message) => msg.role === 'system')
-      ? messages
-      : [
-          {
-            role: 'system',
-            content: 'You are a helpful, friendly, and concise assistant. Provide accurate and detailed information while being conversational.',
-          },
-          ...messages,
-        ];
-
-    // Request the OpenAI API for the response
-    const response = await openai.chat.completions.create({
-      model: model,
-      messages: messagesWithSystem,
+    // Use the streamText function from the Vercel AI SDK
+    const result = await streamText({
+      model: openai(model),
+      messages,
       temperature: 0.7,
-      stream: true,
     });
 
-    // Convert the response into a friendly text-stream
-    const stream = OpenAIStream(response);
-
-    // Respond with the stream
-    return new StreamingTextResponse(stream);
+    // Return a streaming response
+    return result.toTextStreamResponse();
   } catch (error: unknown) {
     console.error('Error in chat API:', error);
     const errorMessage = error instanceof Error ? error.message : 'An error occurred during the request';
